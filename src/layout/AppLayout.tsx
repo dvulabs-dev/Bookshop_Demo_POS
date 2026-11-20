@@ -8,6 +8,7 @@ import {
   Languages,
   LogOut,
   Menu,
+  MoreHorizontal,
   Moon,
   Package,
   Receipt,
@@ -31,6 +32,7 @@ import { DialogHost, toast } from '../components/dialogs'
 import { ROLE_LABELS } from '../data/roles'
 import { poPayable } from '../lib/calc'
 import { fmtDate, startOfDay } from '../lib/utils'
+import { useResponsiveTables } from '../lib/useResponsiveTables'
 import type { Permission } from '../types'
 
 interface NavItem {
@@ -102,8 +104,21 @@ export default function AppLayout() {
   const purchaseOrders = useStore((s) => s.purchaseOrders)
   const [open, setOpen] = useState(false)
   const [bell, setBell] = useState(false)
+  useResponsiveTables()
 
-  useEffect(() => setOpen(false), [loc.pathname])
+  useEffect(() => {
+    setOpen(false)
+    setBell(false)
+  }, [loc.pathname])
+  // lock page scroll while the mobile drawer is open
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
   useEffect(() => {
     document.documentElement.dataset.theme = settings.appearance.theme
     document.documentElement.style.setProperty('--accent', settings.appearance.accent)
@@ -159,6 +174,12 @@ export default function AppLayout() {
     return out
   }, [products, reservations, specialOrders, purchaseOrders, settings.notifications, can])
 
+  const flatNav = NAV.flatMap((g) => g.items).filter((i) => !i.any || i.any.some(can))
+  const tabRoutes = ['/', '/pos', '/sales', '/products', '/customers', '/stock']
+  const tabs = tabRoutes.map((r) => flatNav.find((i) => i.to === r)).filter((i): i is NavItem => !!i).slice(0, 4)
+  const current = flatNav.find((i) => (i.to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(i.to)))
+  const inTabs = !!current && tabs.some((x) => x.to === current.to)
+
   if (!user) return null
   const dark = settings.appearance.theme === 'dark'
   const lang = settings.appearance.language
@@ -199,6 +220,24 @@ export default function AppLayout() {
           })}
         </nav>
         <div className="sidebar-foot">
+          <div className="drawer-user only-mobile">
+            <div className="avatar">{user.name[0]}</div>
+            <div className="user-meta">
+              <strong>{user.name}</strong>
+              <small>{ROLE_LABELS[user.role]}</small>
+            </div>
+            <button
+              className="icon-btn"
+              title={t('Sign out')}
+              aria-label={t('Sign out')}
+              onClick={() => {
+                logout()
+                nav('/login')
+              }}
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
           <div className="powered">
             Built by <b>DVULabs</b>
             <br />
@@ -213,10 +252,16 @@ export default function AppLayout() {
           <button className="icon-btn only-mobile" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu size={20} />
           </button>
+          <div className="topbar-logo only-compact">
+            <LogoMark size={30} />
+          </div>
           <div className="topbar-title">
             <span className="muted small">{fmtDate(new Date().toISOString())}</span>
             <strong>
-              {t('Welcome')}, {user.name.split(' ')[0]}
+              <span className="t-desktop">
+                {t('Welcome')}, {user.name.split(' ')[0]}
+              </span>
+              <span className="t-mobile">{current ? t(current.label) : settings.business.name}</span>
             </strong>
           </div>
           <div className="spacer" />
@@ -280,6 +325,18 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <nav className="bottom-nav" aria-label="Primary">
+        {tabs.map((i) => (
+          <NavLink key={i.to} to={i.to} end={i.to === '/'} className={({ isActive }) => `bn-item ${isActive ? 'active' : ''}`}>
+            {i.icon}
+            <span>{t(i.label.split(' /')[0].split(' &')[0])}</span>
+          </NavLink>
+        ))}
+        <button type="button" className={`bn-item ${open || (!!current && !inTabs) ? 'active' : ''}`} onClick={() => setOpen(true)}>
+          <MoreHorizontal size={18} />
+          <span>More</span>
+        </button>
+      </nav>
       <DialogHost />
     </div>
   )
